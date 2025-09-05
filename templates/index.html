@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataViz - Generative Motion</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0A0A0A; }
+        .btn-primary { background: linear-gradient(90deg, #3A7BFD 0%, #6C56F0 100%); transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
+        .btn-primary:disabled { background: #2a2a2a; cursor: not-allowed; transform: translateY(0); box-shadow: none; }
+        .input-glow:focus-within { box-shadow: 0 0 0 2px rgba(58, 123, 253, 0.5); }
+        .segmented-control button.active { background-color: #3A7BFD; color: white; }
+        .loader { width: 24px; height: 24px; border: 3px solid #3A7BFD; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite; }
+        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #explanation-output h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: #a5b4fc; }
+        #explanation-output p { margin-bottom: 0.5rem; color: #d1d5db; }
+        #explanation-output code { background-color: #1f2937; padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.9em; }
+    </style>
+</head>
+<body class="text-gray-200 flex flex-col items-center min-h-screen p-4 sm:p-6 lg:p-8">
+
+    <div class="w-full max-w-5xl mx-auto">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-5xl font-bold text-white">DataViz</h1>
+            <p class="text-gray-400 mt-2 text-lg">Generative Motion for Modern Data Storytelling</p>
+        </header>
+
+        <main class="bg-black/30 backdrop-blur-sm border border-gray-800 rounded-2xl shadow-2xl p-6 md:p-8">
+            <div class="flex flex-col sm:flex-row items-center gap-4">
+                <div class="relative flex-grow w-full bg-gray-900 border border-gray-700 rounded-lg input-glow transition">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z" /></svg>
+                    <input type="text" id="prompt-input" placeholder="An animation showing the law of gravity..." class="w-full bg-transparent text-white rounded-lg p-3 pl-10 pr-24 focus:outline-none">
+                    <button id="inspire-btn" class="absolute right-2 top-1/2 -translate-y-1/2 bg-gray-700 hover:bg-gray-600 text-sm font-semibold text-white py-1.5 px-3 rounded-md transition">✨ Inspire Me</button>
+                </div>
+                <button id="generate-btn" class="btn-primary text-white font-semibold py-3 px-8 rounded-lg w-full sm:w-auto flex items-center justify-center gap-2">
+                    <span id="btn-text">Generate</span>
+                    <div id="btn-loader" class="loader hidden"></div>
+                </button>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-gray-800">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Aspect Ratio</label>
+                    <div id="aspect-ratio-control" class="segmented-control flex w-full bg-gray-900 border border-gray-700 rounded-lg p-1">
+                        <button data-value="landscape" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition active">Landscape 16:9</button>
+                        <button data-value="portrait" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition">Portrait 9:16</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Quality</label>
+                    <div id="quality-control" class="segmented-control flex w-full bg-gray-900 border border-gray-700 rounded-lg p-1">
+                        <button data-value="fast" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition">Fast (480p)</button>
+                        <button data-value="good" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition active">Good (720p)</button>
+                        <button data-value="best" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition">Best (1080p)</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="status-container" class="text-center mt-6 h-6 text-sm text-gray-400"></div>
+        </main>
+
+        <div id="output-container" class="mt-8 hidden">
+            <div class="bg-black/30 border border-gray-800 rounded-2xl shadow-2xl p-6 md:p-8">
+                <h2 id="video-title" class="text-2xl md:text-3xl font-bold text-white text-center"></h2>
+                <p id="video-description" class="text-gray-400 mt-2 text-center max-w-2xl mx-auto"></p>
+                <div id="video-container" class="my-6 bg-black rounded-lg overflow-hidden border border-gray-700"></div>
+                
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-white">Generated Manim Code</h2>
+                    <button id="copy-btn" class="bg-gray-700 hover:bg-gray-600 text-sm text-white font-semibold py-2 px-4 rounded-lg transition">Copy Code</button>
+                </div>
+                <div class="bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
+                    <pre class="max-h-[400px]"><code id="code-output" class="language-python"></code></pre>
+                </div>
+
+                <div class="mt-6 text-center">
+                    <button id="explain-btn" class="bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 font-semibold py-2 px-5 rounded-lg transition">✨ Explain This Code</button>
+                </div>
+                <div id="explanation-container" class="mt-6 p-6 bg-gray-900/50 border border-gray-700 rounded-lg hidden">
+                    <div id="explanation-output" class="prose prose-invert max-w-none"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Element Cache
+            const ui = {
+                promptInput: document.getElementById('prompt-input'),
+                generateBtn: document.getElementById('generate-btn'),
+                inspireBtn: document.getElementById('inspire-btn'),
+                btnText: document.getElementById('btn-text'),
+                btnLoader: document.getElementById('btn-loader'),
+                statusContainer: document.getElementById('status-container'),
+                outputContainer: document.getElementById('output-container'),
+                videoContainer: document.getElementById('video-container'),
+                videoTitle: document.getElementById('video-title'),
+                videoDescription: document.getElementById('video-description'),
+                codeOutput: document.getElementById('code-output'),
+                copyBtn: document.getElementById('copy-btn'),
+                explainBtn: document.getElementById('explain-btn'),
+                explanationContainer: document.getElementById('explanation-container'),
+                explanationOutput: document.getElementById('explanation-output'),
+                aspectRatioControl: document.getElementById('aspect-ratio-control'),
+                qualityControl: document.getElementById('quality-control'),
+            };
+
+            // --- Event Listeners ---
+            const setupSegmentedControl = (container) => {
+                container.addEventListener('click', (e) => {
+                    if (e.target.tagName === 'BUTTON') {
+                        container.querySelector('button.active').classList.remove('active');
+                        e.target.classList.add('active');
+                    }
+                });
+            };
+            setupSegmentedControl(ui.aspectRatioControl);
+            setupSegmentedControl(ui.qualityControl);
+
+            ui.generateBtn.addEventListener('click', handleGenerate);
+            ui.inspireBtn.addEventListener('click', handleInspire);
+            ui.copyBtn.addEventListener('click', handleCopy);
+            ui.explainBtn.addEventListener('click', handleExplain);
+
+            // --- API Handlers ---
+            async function handleGenerate() {
+                const prompt = ui.promptInput.value.trim();
+                if (!prompt) return showStatus("Please enter a prompt to begin.", "error");
+                startLoading();
+                try {
+                    const aspectRatio = ui.aspectRatioControl.querySelector('button.active').dataset.value;
+                    const quality = ui.qualityControl.querySelector('button.active').dataset.value;
+                    const response = await fetch('/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ prompt, aspectRatio, quality })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error);
+                    displayResults(data);
+                    showStatus("Animation generated successfully.", "success");
+                } catch (error) {
+                    showStatus(error.message, "error");
+                } finally {
+                    stopLoading();
+                }
+            }
+
+            async function handleInspire() {
+                this.disabled = true;
+                const originalText = this.innerHTML;
+                this.innerHTML = '...';
+                try {
+                    const response = await fetch('/suggest_prompts');
+                    const suggestions = await response.json();
+                    if (!response.ok) throw new Error(suggestions.error);
+                    if (suggestions && suggestions.length > 0) {
+                        ui.promptInput.value = suggestions[Math.floor(Math.random() * suggestions.length)];
+                    }
+                } catch (error) {
+                    showStatus(error.message, 'error');
+                } finally {
+                    this.disabled = false;
+                    this.innerHTML = originalText;
+                }
+            }
+
+            async function handleExplain() {
+                const code = ui.codeOutput.textContent;
+                if (!code) return;
+                this.disabled = true;
+                this.textContent = 'Thinking...';
+                ui.explanationContainer.classList.remove('hidden');
+                ui.explanationOutput.innerHTML = '<div class="loader mx-auto"></div>';
+                try {
+                    const response = await fetch('/explain_code', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code })
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error);
+                    ui.explanationOutput.innerHTML = marked.parse(data.explanation);
+                } catch (error) {
+                    ui.explanationOutput.innerHTML = `<p class="text-red-500">${error.message}</p>`;
+                } finally {
+                    this.disabled = false;
+                    this.textContent = '✨ Explain This Code';
+                }
+            }
+            
+            function handleCopy() {
+                navigator.clipboard.writeText(ui.codeOutput.textContent).then(() => {
+                    this.textContent = 'Copied!';
+                    setTimeout(() => { this.textContent = 'Copy Code'; }, 2000);
+                });
+            }
+
+            // --- UI State Management ---
+            function startLoading() {
+                ui.generateBtn.disabled = true;
+                ui.btnText.textContent = "Generating...";
+                ui.btnLoader.classList.remove('hidden');
+                ui.outputContainer.classList.add('hidden');
+                ui.explanationContainer.classList.add('hidden');
+                ui.videoContainer.innerHTML = '';
+                ui.codeOutput.textContent = '';
+                showStatus("AI is warming up... This may take a moment.", "info");
+            }
+
+            function stopLoading() {
+                ui.generateBtn.disabled = false;
+                ui.btnText.textContent = "Generate";
+                ui.btnLoader.classList.add('hidden');
+            }
+
+            function showStatus(message, type = "info") {
+                ui.statusContainer.textContent = message;
+                const colors = {
+                    success: 'text-green-400',
+                    error: 'text-red-500',
+                    info: 'text-gray-400'
+                };
+                ui.statusContainer.className = `text-center mt-6 h-6 text-sm ${colors[type]}`;
+            }
+
+            function displayResults(data) {
+                ui.outputContainer.classList.remove('hidden');
+                ui.videoTitle.textContent = data.meta.title;
+                ui.videoDescription.textContent = data.meta.description;
+
+                const videoElement = document.createElement('video');
+                videoElement.src = data.video_path + `?t=${new Date().getTime()}`;
+                videoElement.controls = true;
+                videoElement.className = 'w-full h-auto rounded-lg';
+                ui.videoContainer.innerHTML = '';
+                ui.videoContainer.appendChild(videoElement);
+
+                ui.codeOutput.textContent = data.code;
+                Prism.highlightElement(ui.codeOutput);
+            }
+        });
+    </script>
+</body>
+</html>
+
+
