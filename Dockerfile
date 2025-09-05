@@ -1,5 +1,6 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+# Use a more complete official Python runtime as a parent image.
+# 'bullseye' is a standard Debian release that has better package compatibility than 'slim'.
+FROM python:3.10-bullseye
 
 # Set the working directory in the container
 WORKDIR /app
@@ -7,7 +8,6 @@ WORKDIR /app
 # Install system-level dependencies required by Manim
 # This is the crucial step that makes Docker so powerful for this project.
 # We are installing FFmpeg, a smaller set of essential LaTeX packages, and other libraries.
-# This avoids the fragile and slow 'texlive-full' package.
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     texlive-latex-base \
@@ -36,6 +36,6 @@ EXPOSE 8000
 
 # The command to run your application in production using Gunicorn
 # Gunicorn is a robust WSGI server, unlike Flask's built-in development server.
-CMD ["gunicorn", "--bind", "0._0.0.0:8000", "--workers", "2", "--timeout", "300", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "300", "app:app"]
 
 
