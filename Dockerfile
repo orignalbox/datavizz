@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     libcairo2-dev \
     libjpeg-dev \
     libgif-dev \
+    libpango1.0-dev \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
