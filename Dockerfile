@@ -6,10 +6,15 @@ WORKDIR /app
 
 # Install system-level dependencies required by Manim
 # This is the crucial step that makes Docker so powerful for this project.
-# We are installing FFmpeg, LaTeX, and other necessary libraries.
+# We are installing FFmpeg, a smaller set of essential LaTeX packages, and other libraries.
+# This avoids the fragile and slow 'texlive-full' package.
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    texlive-full \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-science \
+    tipa \
     libgl1-mesa-glx \
     libcairo2-dev \
     libjpeg-dev \
@@ -31,5 +36,6 @@ EXPOSE 8000
 
 # The command to run your application in production using Gunicorn
 # Gunicorn is a robust WSGI server, unlike Flask's built-in development server.
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "300", "app:app"]
+CMD ["gunicorn", "--bind", "0._0.0.0:8000", "--workers", "2", "--timeout", "300", "app:app"]
+
 
