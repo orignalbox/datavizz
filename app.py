@@ -1,213 +1,214 @@
 import os
-import re
-import json
 import subprocess
-from flask import Flask, request, jsonify, render_template_string
-
+import uuid
+import logging
+from flask import Flask, request, jsonify, render_template, send_file
+from flask_cors import CORS
 import google.generativeai as genai
+import io
 
-# --- Constants ---
-STATIC_DIR = "static"
-GENERATED_CODE_FILENAME = "generated_scene.py"
+# --- Configuration ---
+logging.basicConfig(level=logging.INFO)
+# It's recommended to set the API key as an environment variable for security
+# For Render deployment, this will be set in the service's environment settings.
+# For local testing, you can set it in your shell: export GOOGLE_API_KEY='your_key'
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
-# --- App Initialization ---
-app = Flask(__name__)
+if not GOOGLE_API_KEY:
+    logging.warning("GOOGLE_API_KEY environment variable not set. API calls will fail.")
+else:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
-# --- Gemini API Configuration ---
-def configure_gemini():
-    """Configures the Gemini API."""
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("FATAL: GOOGLE_API_KEY environment variable not set.")
-    genai.configure(api_key=api_key)
+# --- Flask App Initialization ---
+app = Flask(__name__, static_folder='static', template_folder='templates')
+CORS(app)
 
-try:
-    configure_gemini()
-    model = genai.GenerativeModel('gemini-1.5-flash')
-except ValueError as e:
-    print(e)
-    model = None
+# --- Gemini Model Configuration ---
+# Use a model that is good at creative and code-based tasks
+generation_config = {
+    "temperature": 0.7,
+    "top_p": 1,
+    "top_k": 1,
+    "max_output_tokens": 8192,
+}
+safety_settings = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+]
+model = genai.GenerativeModel(
+    model_name="gemini-1.0-pro",
+    generation_config=generation_config,
+    safety_settings=safety_settings
+)
 
-# --- Prompt Engineering Module ---
-class Prompts:
-    PROMPT_ENHANCER = """
-    You are a world-class creative director for a motion graphics studio specializing in Manim animations.
-    A client has given you a simple idea. Your task is to expand this into a detailed, scene-by-scene storyboard.
-    Focus on visual storytelling. Describe the objects, their transformations, the camera movements, and the overall narrative flow.
-    The output should be a rich, descriptive paragraph that will inspire a designer and a programmer.
-    Client's Idea: "{prompt}"
+# --- System Prompts for Multi-Step Generation ---
+PROMPT_ENHANCER_SYSTEM = """
+You are a creative assistant for a data visualization expert. Your task is to take a user's simple idea and expand it into a detailed, scene-by-scene concept for a short Manim animation. Describe camera movements, object animations (like FadeIn, GrowFromCenter, Transform), and the overall narrative flow. Be descriptive and imaginative. Output only the detailed concept.
+"""
+
+PROMPT_DESIGNER_SYSTEM = """
+You are a senior UI/UX and motion graphics designer. You will be given a detailed animation concept. Your job is to define the visual theme. Specify a harmonious color palette (provide hex codes), suggest modern font styles, and define the overall aesthetic (e.g., 'minimalist', 'futuristic', 'playful'). Structure your output clearly with sections for 'Color Palette', 'Typography', and 'Overall Aesthetic'. Output only the design specifications.
+"""
+
+PROMPT_PROGRAMMER_SYSTEM = """
+You are an expert Manim programmer. You will receive a detailed animation concept and a set of design specifications. Your task is to write a complete, executable Python script using the Manim library to generate the described animation. The script must:
+1.  Be a single block of Python code.
+2.  Define a single Manim scene class that inherits from `Scene`.
+3.  Incorporate the specified colors, fonts, and aesthetic.
+4.  Ensure the generated video is high quality and saved with a predictable filename.
+5.  Only output the raw Python code. Do not wrap it in markdown or add explanations.
+"""
+
+# --- Helper Functions ---
+def run_manim(manim_code: str, quality: str) -> (bool, str, str):
     """
-
-    DESIGNER = """
-    You are a senior visual designer with a keen eye for aesthetics and color theory.
-    Based on the following storyboard, develop a cohesive visual theme for a Manim animation.
-    Your output MUST be a JSON object with the following keys:
-    - "palette": A list of 5-7 complementary hex color codes.
-    - "background_color": A single hex color code for the scene background.
-    - "font": A suggestion for a common font family (e.g., "Inter", "Lato", "Roboto").
-    - "animation_style": A brief description of the animation's feel (e.g., "Smooth and fluid", "Minimal and precise", "Playful and bouncy").
-
-    Storyboard: "{description}"
+    Saves Manim code to a file and runs the Manim process to render the video.
+    Returns the success status, the output video path, and any error messages.
     """
-
-    MANIM_CODER = """
-    You are a lead Manim developer with extensive experience in writing clean, efficient, and correct animation code.
-    Your task is to write a complete, runnable Python script for a Manim animation based on a storyboard and a design brief.
-    **CRITICAL INSTRUCTIONS:**
-    1. The script MUST be a single, complete Python file.
-    2. Import all necessary classes from `manim`.
-    3. The main animation class MUST inherit from `Scene`.
-    4. The entire animation logic MUST be within the `construct` method.
-    5. **Strictly adhere to the design brief**: Use the provided `palette`, `background_color`, and `font`. Set the background color using `config.background_color`.
-    6. **Aspect Ratio**: Design the animation for a '{aspect_ratio}' aspect ratio.
-    7. **Code Only**: Your output MUST be ONLY the raw Python code. Do not wrap it in markdown.
-    **Storyboard:** {description}
-    **Design Brief (JSON):** {theme}
-    """
-
-    PROMPT_SUGGESTER = """
-    You are a creative spark. Brainstorm 3 diverse and visually interesting ideas for a short animation using Manim.
-    The ideas should range from mathematical concepts to abstract data visualizations.
-    Return your answer as a perfectly formatted JSON array of strings. Example: ["idea 1", "idea 2", "idea 3"].
-    """
-
-    CODE_EXPLAINER = """
-    You are a friendly and skilled Manim teaching assistant.
-    Explain the following Manim code in a clear, concise, and beginner-friendly way.
-    Break down your explanation into logical sections using markdown headings (e.g., ### Setup, ### Animation Sequence).
-    Explain what the code *does* and *why*. Your output should be clean, well-formatted markdown.
-    **Manim Code to Explain:** ```python\n{code}\n```
-    """
-
-    TITLE_GENERATOR = """
-    You are a creative copywriter specializing in catchy titles for video content.
-    Based on the following animation storyboard, generate a title and a short, engaging description (1-2 sentences).
-    The tone should be intriguing and suitable for platforms like YouTube or Twitter.
-    Return your answer as a single, perfectly formatted JSON object with two keys: "title" and "description".
-    **Storyboard:** {description}
-    """
-
-# --- Helper function for sanitizing LLM JSON output ---
-def clean_json_response(text):
-    """Extracts a JSON object or array from a string."""
-    text = text.strip()
-    # Find the start of the JSON (either { or [)
-    start_brace = text.find('{')
-    start_bracket = text.find('[')
+    unique_id = uuid.uuid4()
+    script_path = f"/tmp/generated_scene_{unique_id}.py"
+    # Using /tmp ensures files are written to a temporary, in-memory filesystem in many cloud environments
     
-    start_index = -1
-    if start_brace != -1 and start_bracket != -1:
-        start_index = min(start_brace, start_bracket)
-    elif start_brace != -1:
-        start_index = start_brace
-    else:
-        start_index = start_bracket
+    with open(script_path, "w") as f:
+        f.write(manim_code)
 
-    if start_index == -1:
-        raise ValueError("No JSON object or array found in the response.")
-        
-    # Find the corresponding end brace/bracket
-    end_char = '}' if text[start_index] == '{' else ']'
-    return text[start_index : text.rfind(end_char) + 1]
-
-
-# --- Core Logic / Services ---
-def enhance_prompt(user_prompt):
-    print("Step 1: Enhancing prompt...")
-    response = model.generate_content(Prompts.PROMPT_ENHANCER.format(prompt=user_prompt))
-    return response.text
-
-def design_theme(description):
-    print("Step 2: Designing theme...")
-    response = model.generate_content(Prompts.DESIGNER.format(description=description))
-    return clean_json_response(response.text)
-
-def generate_title_and_desc(description):
-    print("Step 2.5: Generating title...")
-    response = model.generate_content(Prompts.TITLE_GENERATOR.format(description=description))
-    return clean_json_response(response.text)
-
-def generate_manim_code(description, theme, aspect_ratio):
-    print("Step 3: Generating Manim code...")
-    response = model.generate_content(Prompts.MANIM_CODER.format(description=description, theme=theme, aspect_ratio=aspect_ratio))
-    return response.text.strip()
-
-def render_manim_video(code, quality):
-    print(f"Step 4: Rendering video with quality '{quality}'...")
-    with open(GENERATED_CODE_FILENAME, "w") as f: f.write(code)
-    scene_match = re.search(r"class (\w+)\(Scene\):", code)
-    if not scene_match: raise ValueError("Could not find a Scene class in the generated code.")
-    scene_name = scene_match.group(1)
+    # Manim command construction
+    # The output path is also in /tmp
+    output_filename = f"video_{unique_id}.mp4"
+    output_path = f"/tmp/{output_filename}"
     
-    quality_flags = {"fast": "-pql", "good": "-pqm", "best": "-pqh"}
-    command = ["manim", quality_flags.get(quality, "-pqh"), GENERATED_CODE_FILENAME, scene_name, "--media_dir", STATIC_DIR]
-    
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"--- MANIM ERROR ---\n{result.stderr}\n--- END MANIM ERROR ---")
-        raise RuntimeError("Manim rendering failed. Check console for details.")
-    
-    print("Manim render successful!")
-    video_folder = GENERATED_CODE_FILENAME.replace('.py', '')
-    res_folder_map = {"fast": "480p15", "good": "720p30", "best": "1080p60"}
-    res_folder = res_folder_map.get(quality, "1080p60")
-    search_dir = os.path.join(STATIC_DIR, "videos", video_folder, res_folder)
-    
-    if os.path.exists(search_dir):
-        for file in os.listdir(search_dir):
-            if file.endswith(".mp4") and scene_name in file:
-                return os.path.join("static/videos", video_folder, res_folder, file).replace("\\", "/")
-    raise FileNotFoundError("Could not locate the rendered video file.")
+    quality_flag = {
+        "1080p": "-qh", # High quality
+        "720p": "-qm", # Medium quality
+        "480p": "-ql"  # Low quality
+    }.get(quality, "-ql") # Default to low quality
 
-# --- API Endpoints / Controllers ---
+    command = [
+        "manim",
+        script_path,
+        "-o",
+        output_filename, # Manim -o specifies the output file name
+        "--media_dir",
+        "/tmp", # Tell manim where to put the output files
+        quality_flag,
+        "--format",
+        "mp4",
+        "--progress_bar",
+        "none", # Disable progress bar for cleaner logs
+        "-q" # Suppress non-error output
+    ]
+
+    try:
+        logging.info(f"Running Manim command: {' '.join(command)}")
+        # Increased timeout to handle potentially long renders
+        process = subprocess.run(command, capture_output=True, text=True, check=True, timeout=240)
+        logging.info("Manim process completed successfully.")
+        logging.info(f"Manim stdout: {process.stdout}")
+        return True, output_path, None
+    except subprocess.CalledProcessError as e:
+        error_message = f"Manim rendering failed.\nExit Code: {e.returncode}\nStdout: {e.stdout}\nStderr: {e.stderr}"
+        logging.error(error_message)
+        return False, None, error_message
+    except subprocess.TimeoutExpired as e:
+        error_message = f"Manim rendering timed out.\nStdout: {e.stdout}\nStderr: {e.stderr}"
+        logging.error(error_message)
+        return False, None, "Rendering process took too long and was terminated."
+    except Exception as e:
+        error_message = f"An unexpected error occurred during Manim execution: {e}"
+        logging.error(error_message)
+        return False, None, error_message
+
+# --- API Routes ---
 @app.route('/')
 def index():
-    return render_template_string(open('templates/index.html').read())
+    """Serves the main HTML page."""
+    return render_template('index.html')
 
 @app.route('/generate', methods=['POST'])
-def generate_endpoint():
-    if not model: return jsonify({'error': 'Gemini API not configured.'}), 503
+def generate_animation():
+    """
+    The main endpoint to generate an animation.
+    It takes a user prompt and returns the video file directly.
+    """
+    if not GOOGLE_API_KEY:
+        return jsonify({"error": "Server is not configured with a Google API key."}), 500
+
     data = request.json
-    if not data or 'prompt' not in data: return jsonify({'error': 'Prompt is required.'}), 400
-    
+    user_prompt = data.get('prompt')
+    orientation = data.get('orientation', 'landscape')
+    quality = data.get('quality', '480p') # Default to 480p for faster generation
+
+    if not user_prompt:
+        return jsonify({"error": "Prompt is required."}), 400
+
     try:
-        description = enhance_prompt(data['prompt'])
-        theme = design_theme(description)
-        meta_json = generate_title_and_desc(description)
-        code = generate_manim_code(description, theme, data.get('aspectRatio', 'landscape'))
-        video_path = render_manim_video(code, data.get('quality', 'best'))
+        # Step 1: Enhance the prompt
+        logging.info("Step 1: Enhancing prompt...")
+        enhancer_prompt = f"{PROMPT_ENHANCER_SYSTEM}\n\nUser Idea: {user_prompt}"
+        enhanced_concept = model.generate_content(enhancer_prompt).text
+        logging.info(f"Enhanced Concept: {enhanced_concept[:200]}...")
+
+        # Step 2: Design the visual theme
+        logging.info("Step 2: Designing theme...")
+        designer_prompt = f"{PROMPT_DESIGNER_SYSTEM}\n\nAnimation Concept: {enhanced_concept}"
+        design_specs = model.generate_content(designer_prompt).text
+        logging.info(f"Design Specs: {design_specs[:200]}...")
+
+        # Step 3: Generate the Manim code
+        logging.info("Step 3: Generating Manim code...")
+        programmer_prompt = (
+            f"{PROMPT_PROGRAMMER_SYSTEM}\n\n"
+            f"Animation Concept:\n{enhanced_concept}\n\n"
+            f"Design Specifications:\n{design_specs}\n\n"
+            f"Additional Requirements:\n- The final video orientation must be {orientation}."
+        )
+        manim_code = model.generate_content(programmer_prompt).text
+        # Clean up potential markdown fences
+        if manim_code.startswith("```python"):
+            manim_code = manim_code[9:].strip()
+            if manim_code.endswith("```"):
+                manim_code = manim_code[:-3].strip()
+        logging.info("Manim code generated.")
+
+        # Step 4: Run Manim to render the video
+        logging.info("Step 4: Rendering video with Manim...")
+        success, video_path, error = run_manim(manim_code, quality)
+
+        if not success:
+            return jsonify({"error": "Manim rendering failed.", "details": error}), 500
         
-        return jsonify({
-            'video_path': video_path,
-            'code': code,
-            'meta': json.loads(meta_json)
-        })
-    except Exception as e:
-        print(f"An unexpected error occurred: {e}")
-        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+        # Step 5: Send the video file from memory
+        logging.info(f"Video rendered successfully at {video_path}. Sending file to client.")
 
-@app.route('/suggest_prompts', methods=['GET'])
-def suggest_prompts_endpoint():
-    if not model: return jsonify({'error': 'Gemini API not configured.'}), 503
-    try:
-        response = model.generate_content(Prompts.PROMPT_SUGGESTER)
-        suggestions = json.loads(clean_json_response(response.text))
-        return jsonify(suggestions)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        # Read the generated file into an in-memory buffer
+        with open(video_path, 'rb') as f:
+            video_buffer = io.BytesIO(f.read())
+        
+        # Clean up the temporary files
+        os.remove(video_path)
+        # We can safely ignore if the script file doesn't exist, but it's good practice
+        script_file_to_remove = video_path.replace(".mp4",".py").replace("video_","generated_scene_")
+        if os.path.exists(script_file_to_remove):
+             os.remove(script_file_to_remove)
 
-@app.route('/explain_code', methods=['POST'])
-def explain_code_endpoint():
-    if not model: return jsonify({'error': 'Gemini API not configured.'}), 503
-    data = request.json
-    if not data or 'code' not in data: return jsonify({'error': 'Code is required.'}), 400
-    try:
-        response = model.generate_content(Prompts.CODE_EXPLAINER.format(code=data['code']))
-        return jsonify({'explanation': response.text})
+        video_buffer.seek(0) # Rewind the buffer to the beginning
+
+        return send_file(
+            video_buffer,
+            mimetype='video/mp4',
+            as_attachment=False, # Serve it inline
+            download_name='animation.mp4'
+        )
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"An error occurred in the generation pipeline: {e}")
+        return jsonify({"error": "An unexpected server error occurred."}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    # Use 0.0.0.0 to make it accessible on the network
+    # The port should match what's exposed in the Dockerfile
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
 
 

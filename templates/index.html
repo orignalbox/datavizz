@@ -3,253 +3,274 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataViz - Generative Motion</title>
+    <title>DataViz AI Animator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #0A0A0A; }
-        .btn-primary { background: linear-gradient(90deg, #3A7BFD 0%, #6C56F0 100%); transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); }
-        .btn-primary:disabled { background: #2a2a2a; cursor: not-allowed; transform: translateY(0); box-shadow: none; }
-        .input-glow:focus-within { box-shadow: 0 0 0 2px rgba(58, 123, 253, 0.5); }
-        .segmented-control button.active { background-color: #3A7BFD; color: white; }
-        .loader { width: 24px; height: 24px; border: 3px solid #3A7BFD; border-bottom-color: transparent; border-radius: 50%; display: inline-block; box-sizing: border-box; animation: rotation 1s linear infinite; }
-        @keyframes rotation { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #explanation-output h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; color: #a5b4fc; }
-        #explanation-output p { margin-bottom: 0.5rem; color: #d1d5db; }
-        #explanation-output code { background-color: #1f2937; padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.9em; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0A0A0A;
+            color: #EAEAEA;
+        }
+        .main-container {
+            min-height: 100vh;
+        }
+        .prompt-input {
+            background-color: #1A1A1A;
+            border: 1px solid #333;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .prompt-input:focus {
+            outline: none;
+            border-color: #4A90E2;
+            box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.5);
+        }
+        .prompt-input.border-red-500 {
+            border-color: #EF4444 !important;
+        }
+        .prompt-input.shadow-red-500:focus {
+            box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.5) !important;
+        }
+        .control-label {
+            background-color: #1A1A1A;
+            border: 1px solid #333;
+        }
+        .control-label.active {
+            background-color: #4A90E2;
+            color: #FFFFFF;
+            border-color: #4A90E2;
+        }
+        .btn-primary {
+            background-color: #4A90E2;
+            transition: background-color 0.3s;
+        }
+        .btn-primary:hover:not(:disabled) {
+            background-color: #357ABD;
+        }
+        .btn-primary:disabled {
+            background-color: #333;
+            cursor: not-allowed;
+        }
+        .loader {
+            border-color: #4A90E2;
+            border-top-color: transparent;
+        }
+        #video-container, #error-container, #placeholder-container {
+            background-color: #1A1A1A;
+            border: 1px dashed #333;
+        }
+        #status-text {
+            transition: opacity 0.3s ease-in-out;
+        }
     </style>
 </head>
-<body class="text-gray-200 flex flex-col items-center min-h-screen p-4 sm:p-6 lg:p-8">
+<body>
+    <div class="main-container w-full flex flex-col items-center justify-center p-4 md:p-8">
+        <div class="w-full max-w-4xl mx-auto">
+            <!-- Header -->
+            <header class="text-center mb-8">
+                <h1 class="text-4xl md:text-5xl font-bold tracking-tighter">DataViz</h1>
+                <p class="text-lg md:text-xl text-gray-400 mt-2">Transform Your Ideas into Motion with AI</p>
+            </header>
 
-    <div class="w-full max-w-5xl mx-auto">
-        <header class="text-center mb-10">
-            <h1 class="text-4xl md:text-5xl font-bold text-white">DataViz</h1>
-            <p class="text-gray-400 mt-2 text-lg">Generative Motion for Modern Data Storytelling</p>
-        </header>
-
-        <main class="bg-black/30 backdrop-blur-sm border border-gray-800 rounded-2xl shadow-2xl p-6 md:p-8">
-            <div class="flex flex-col sm:flex-row items-center gap-4">
-                <div class="relative flex-grow w-full bg-gray-900 border border-gray-700 rounded-lg input-glow transition">
-                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L16.732 3.732z" /></svg>
-                    <input type="text" id="prompt-input" placeholder="An animation showing the law of gravity..." class="w-full bg-transparent text-white rounded-lg p-3 pl-10 pr-24 focus:outline-none">
-                    <button id="inspire-btn" class="absolute right-2 top-1/2 -translate-y-1/2 bg-gray-700 hover:bg-gray-600 text-sm font-semibold text-white py-1.5 px-3 rounded-md transition">✨ Inspire Me</button>
-                </div>
-                <button id="generate-btn" class="btn-primary text-white font-semibold py-3 px-8 rounded-lg w-full sm:w-auto flex items-center justify-center gap-2">
-                    <span id="btn-text">Generate</span>
-                    <div id="btn-loader" class="loader hidden"></div>
-                </button>
-            </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 pt-6 border-t border-gray-800">
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Aspect Ratio</label>
-                    <div id="aspect-ratio-control" class="segmented-control flex w-full bg-gray-900 border border-gray-700 rounded-lg p-1">
-                        <button data-value="landscape" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition active">Landscape 16:9</button>
-                        <button data-value="portrait" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition">Portrait 9:16</button>
+            <!-- Main Content -->
+            <main>
+                <!-- Video Display Area -->
+                <div id="video-wrapper" class="w-full aspect-video rounded-lg mb-6 flex items-center justify-center">
+                    <div id="placeholder-container" class="w-full h-full flex flex-col items-center justify-center text-gray-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 8.02-8.02"></path><path d="m22 2-2.5 2.5"></path><path d="m13.5 13.5 2.5 2.5"></path><path d="M6 6s.5-1 2-2c1.5-1 3-2 3-2"></path><path d="M18 18s-1 .5-2 2c-1 1.5-2 3-2 3"></path></svg>
+                        <p class="mt-2 text-lg">Let's create some magic</p>
+                        <p class="text-sm text-gray-600">Enter a prompt below to get started</p>
+                    </div>
+                    <div id="loader-container" class="w-full h-full hidden flex-col items-center justify-center text-white">
+                        <div class="loader w-12 h-12 rounded-full border-4 animate-spin mb-4"></div>
+                        <p id="status-text" class="text-lg text-center"></p>
+                        <p class="text-sm text-gray-400 mt-1">(This can take a few minutes)</p>
+                    </div>
+                    <div id="video-container" class="w-full h-full hidden rounded-lg overflow-hidden">
+                        <video id="result-video" class="w-full h-full object-contain" controls></video>
+                    </div>
+                    <div id="error-container" class="w-full h-full hidden flex-col items-center justify-center text-red-400 p-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        <p class="mt-2 text-lg font-semibold">Generation Failed</p>
+                        <p id="error-message" class="text-sm text-center mt-1"></p>
                     </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Quality</label>
-                    <div id="quality-control" class="segmented-control flex w-full bg-gray-900 border border-gray-700 rounded-lg p-1">
-                        <button data-value="fast" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition">Fast (480p)</button>
-                        <button data-value="good" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition active">Good (720p)</button>
-                        <button data-value="best" class="flex-1 text-center py-1.5 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700/50 transition">Best (1080p)</button>
+
+                <!-- Prompt Input -->
+                <div class="relative mb-4">
+                    <textarea id="prompt" class="prompt-input w-full p-4 pr-12 rounded-lg text-base resize-none" rows="3" placeholder="e.g., An animation explaining the Pythagorean theorem"></textarea>
+                </div>
+
+                <!-- Controls -->
+                <div class="flex flex-col md:flex-row gap-4 mb-6">
+                    <!-- Orientation -->
+                    <div class="flex-1">
+                        <span class="text-sm font-medium text-gray-300 mb-2 block">Orientation</span>
+                        <div id="orientation-group" class="grid grid-cols-2 gap-2">
+                            <label class="control-label active text-center p-3 rounded-md cursor-pointer text-sm" data-value="landscape">
+                                <input type="radio" name="orientation" value="landscape" class="sr-only" checked>Landscape
+                            </label>
+                            <label class="control-label text-center p-3 rounded-md cursor-pointer text-sm" data-value="portrait">
+                                <input type="radio" name="orientation" value="portrait" class="sr-only">Portrait
+                            </label>
+                        </div>
+                    </div>
+                    <!-- Quality -->
+                    <div class="flex-1">
+                        <span class="text-sm font-medium text-gray-300 mb-2 block">Quality</span>
+                         <div id="quality-group" class="grid grid-cols-3 gap-2">
+                            <label class="control-label text-center p-3 rounded-md cursor-pointer text-sm" data-value="480p">
+                                <input type="radio" name="quality" value="480p" class="sr-only">Fast
+                            </label>
+                            <label class="control-label active text-center p-3 rounded-md cursor-pointer text-sm" data-value="720p">
+                                <input type="radio" name="quality" value="720p" class="sr-only" checked>Good
+                            </label>
+                             <label class="control-label text-center p-3 rounded-md cursor-pointer text-sm" data-value="1080p">
+                                <input type="radio" name="quality" value="1080p" class="sr-only">Best
+                            </label>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div id="status-container" class="text-center mt-6 h-6 text-sm text-gray-400"></div>
-        </main>
-
-        <div id="output-container" class="mt-8 hidden">
-            <div class="bg-black/30 border border-gray-800 rounded-2xl shadow-2xl p-6 md:p-8">
-                <h2 id="video-title" class="text-2xl md:text-3xl font-bold text-white text-center"></h2>
-                <p id="video-description" class="text-gray-400 mt-2 text-center max-w-2xl mx-auto"></p>
-                <div id="video-container" class="my-6 bg-black rounded-lg overflow-hidden border border-gray-700"></div>
-                
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-xl font-semibold text-white">Generated Manim Code</h2>
-                    <button id="copy-btn" class="bg-gray-700 hover:bg-gray-600 text-sm text-white font-semibold py-2 px-4 rounded-lg transition">Copy Code</button>
-                </div>
-                <div class="bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
-                    <pre class="max-h-[400px]"><code id="code-output" class="language-python"></code></pre>
-                </div>
-
-                <div class="mt-6 text-center">
-                    <button id="explain-btn" class="bg-indigo-500/20 hover:bg-indigo-500/40 text-indigo-300 font-semibold py-2 px-5 rounded-lg transition">✨ Explain This Code</button>
-                </div>
-                <div id="explanation-container" class="mt-6 p-6 bg-gray-900/50 border border-gray-700 rounded-lg hidden">
-                    <div id="explanation-output" class="prose prose-invert max-w-none"></div>
-                </div>
-            </div>
+                <!-- Generate Button -->
+                <button id="generate-btn" class="btn-primary w-full py-3 rounded-lg font-semibold text-lg">Generate</button>
+            </main>
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // Element Cache
-            const ui = {
-                promptInput: document.getElementById('prompt-input'),
-                generateBtn: document.getElementById('generate-btn'),
-                inspireBtn: document.getElementById('inspire-btn'),
-                btnText: document.getElementById('btn-text'),
-                btnLoader: document.getElementById('btn-loader'),
-                statusContainer: document.getElementById('status-container'),
-                outputContainer: document.getElementById('output-container'),
-                videoContainer: document.getElementById('video-container'),
-                videoTitle: document.getElementById('video-title'),
-                videoDescription: document.getElementById('video-description'),
-                codeOutput: document.getElementById('code-output'),
-                copyBtn: document.getElementById('copy-btn'),
-                explainBtn: document.getElementById('explain-btn'),
-                explanationContainer: document.getElementById('explanation-container'),
-                explanationOutput: document.getElementById('explanation-output'),
-                aspectRatioControl: document.getElementById('aspect-ratio-control'),
-                qualityControl: document.getElementById('quality-control'),
-            };
+        const generateBtn = document.getElementById('generate-btn');
+        const promptInput = document.getElementById('prompt');
+        const placeholderContainer = document.getElementById('placeholder-container');
+        const loaderContainer = document.getElementById('loader-container');
+        const statusText = document.getElementById('status-text');
+        const videoContainer = document.getElementById('video-container');
+        const resultVideo = document.getElementById('result-video');
+        const errorContainer = document.getElementById('error-container');
+        const errorMessage = document.getElementById('error-message');
+        let statusInterval;
 
-            // --- Event Listeners ---
-            const setupSegmentedControl = (container) => {
-                container.addEventListener('click', (e) => {
-                    if (e.target.tagName === 'BUTTON') {
-                        container.querySelector('button.active').classList.remove('active');
-                        e.target.classList.add('active');
-                    }
-                });
-            };
-            setupSegmentedControl(ui.aspectRatioControl);
-            setupSegmentedControl(ui.qualityControl);
+        // --- State Management ---
+        const setLoadingState = (isLoading) => {
+            generateBtn.disabled = isLoading;
+            promptInput.disabled = isLoading;
+            placeholderContainer.classList.toggle('hidden', isLoading);
+            loaderContainer.classList.toggle('hidden', !isLoading);
+            videoContainer.classList.add('hidden');
+            errorContainer.classList.add('hidden');
+        };
 
-            ui.generateBtn.addEventListener('click', handleGenerate);
-            ui.inspireBtn.addEventListener('click', handleInspire);
-            ui.copyBtn.addEventListener('click', handleCopy);
-            ui.explainBtn.addEventListener('click', handleExplain);
+        const setVideoState = (videoUrl) => {
+            setLoadingState(false);
+            videoContainer.classList.remove('hidden');
+            resultVideo.src = videoUrl;
+            resultVideo.load();
+            resultVideo.play().catch(e => console.warn("Autoplay was prevented.", e));
+        };
+        
+        const setErrorState = (message) => {
+            setLoadingState(false);
+            errorContainer.classList.remove('hidden');
+            errorMessage.textContent = message || 'An unknown error occurred. Please check the server logs.';
+        };
 
-            // --- API Handlers ---
-            async function handleGenerate() {
-                const prompt = ui.promptInput.value.trim();
-                if (!prompt) return showStatus("Please enter a prompt to begin.", "error");
-                startLoading();
-                try {
-                    const aspectRatio = ui.aspectRatioControl.querySelector('button.active').dataset.value;
-                    const quality = ui.qualityControl.querySelector('button.active').dataset.value;
-                    const response = await fetch('/generate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ prompt, aspectRatio, quality })
-                    });
-                    const data = await response.json();
-                    if (!response.ok) throw new Error(data.error);
-                    displayResults(data);
-                    showStatus("Animation generated successfully.", "success");
-                } catch (error) {
-                    showStatus(error.message, "error");
-                } finally {
-                    stopLoading();
-                }
+        // --- Event Listeners ---
+        generateBtn.addEventListener('click', async () => {
+            const prompt = promptInput.value.trim();
+            if (!prompt) {
+                promptInput.focus();
+                promptInput.classList.add('border-red-500');
+                promptInput.classList.add('shadow-red-500');
+                setTimeout(() => {
+                    promptInput.classList.remove('border-red-500');
+                    promptInput.classList.remove('shadow-red-500');
+                }, 2000);
+                return;
             }
 
-            async function handleInspire() {
-                this.disabled = true;
-                const originalText = this.innerHTML;
-                this.innerHTML = '...';
-                try {
-                    const response = await fetch('/suggest_prompts');
-                    const suggestions = await response.json();
-                    if (!response.ok) throw new Error(suggestions.error);
-                    if (suggestions && suggestions.length > 0) {
-                        ui.promptInput.value = suggestions[Math.floor(Math.random() * suggestions.length)];
-                    }
-                } catch (error) {
-                    showStatus(error.message, 'error');
-                } finally {
-                    this.disabled = false;
-                    this.innerHTML = originalText;
-                }
-            }
-
-            async function handleExplain() {
-                const code = ui.codeOutput.textContent;
-                if (!code) return;
-                this.disabled = true;
-                this.textContent = 'Thinking...';
-                ui.explanationContainer.classList.remove('hidden');
-                ui.explanationOutput.innerHTML = '<div class="loader mx-auto"></div>';
-                try {
-                    const response = await fetch('/explain_code', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ code })
-                    });
-                    const data = await response.json();
-                    if (!response.ok) throw new Error(data.error);
-                    ui.explanationOutput.innerHTML = marked.parse(data.explanation);
-                } catch (error) {
-                    ui.explanationOutput.innerHTML = `<p class="text-red-500">${error.message}</p>`;
-                } finally {
-                    this.disabled = false;
-                    this.textContent = '✨ Explain This Code';
-                }
-            }
+            const orientation = document.querySelector('input[name="orientation"]:checked').value;
+            const quality = document.querySelector('input[name="quality"]:checked').value;
             
-            function handleCopy() {
-                navigator.clipboard.writeText(ui.codeOutput.textContent).then(() => {
-                    this.textContent = 'Copied!';
-                    setTimeout(() => { this.textContent = 'Copy Code'; }, 2000);
+            setLoadingState(true);
+
+            // Dynamic Status Updates
+            const statuses = [
+                "Enhancing your idea...",
+                "Designing the visuals...",
+                "Writing the animation code...",
+                "Rendering the video frames..."
+            ];
+            let statusIndex = 0;
+            
+            statusText.textContent = statuses[statusIndex];
+            statusInterval = setInterval(() => {
+                statusIndex++;
+                if (statusIndex < statuses.length) {
+                    statusText.style.opacity = 0;
+                    setTimeout(() => {
+                        statusText.textContent = statuses[statusIndex];
+                        statusText.style.opacity = 1;
+                    }, 300);
+                } else {
+                    // Stay on the last message, don't cycle
+                    clearInterval(statusInterval);
+                }
+            }, 5000); // More realistic delay between steps
+
+            try {
+                // The backend now sends the video file directly, not a JSON response.
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, orientation, quality }),
                 });
-            }
 
-            // --- UI State Management ---
-            function startLoading() {
-                ui.generateBtn.disabled = true;
-                ui.btnText.textContent = "Generating...";
-                ui.btnLoader.classList.remove('hidden');
-                ui.outputContainer.classList.add('hidden');
-                ui.explanationContainer.classList.add('hidden');
-                ui.videoContainer.innerHTML = '';
-                ui.codeOutput.textContent = '';
-                showStatus("AI is warming up... This may take a moment.", "info");
-            }
+                if (!response.ok) {
+                    // If the response is not OK, it's likely a JSON error object.
+                    const errorData = await response.json();
+                    throw new Error(errorData.details || errorData.error || `HTTP error! status: ${response.status}`);
+                }
 
-            function stopLoading() {
-                ui.generateBtn.disabled = false;
-                ui.btnText.textContent = "Generate";
-                ui.btnLoader.classList.add('hidden');
-            }
+                // Get the video data as a Blob
+                const videoBlob = await response.blob();
+                
+                // Create a temporary URL for the blob
+                const videoUrl = URL.createObjectURL(videoBlob);
 
-            function showStatus(message, type = "info") {
-                ui.statusContainer.textContent = message;
-                const colors = {
-                    success: 'text-green-400',
-                    error: 'text-red-500',
-                    info: 'text-gray-400'
-                };
-                ui.statusContainer.className = `text-center mt-6 h-6 text-sm ${colors[type]}`;
-            }
+                setVideoState(videoUrl);
 
-            function displayResults(data) {
-                ui.outputContainer.classList.remove('hidden');
-                ui.videoTitle.textContent = data.meta.title;
-                ui.videoDescription.textContent = data.meta.description;
-
-                const videoElement = document.createElement('video');
-                videoElement.src = data.video_path + `?t=${new Date().getTime()}`;
-                videoElement.controls = true;
-                videoElement.className = 'w-full h-auto rounded-lg';
-                ui.videoContainer.innerHTML = '';
-                ui.videoContainer.appendChild(videoElement);
-
-                ui.codeOutput.textContent = data.code;
-                Prism.highlightElement(ui.codeOutput);
+            } catch (error) {
+                console.error('Generation failed:', error);
+                setErrorState(error.message);
+            } finally {
+                clearInterval(statusInterval);
             }
         });
+
+        // Custom radio button group handler
+        const setupRadioGroup = (groupId) => {
+            const group = document.getElementById(groupId);
+            group.addEventListener('click', (e) => {
+                const label = e.target.closest('label');
+                if (label) {
+                    // Uncheck and deactivate all labels in the group
+                    group.querySelectorAll('label').forEach(lbl => {
+                        lbl.classList.remove('active');
+                        lbl.querySelector('input').checked = false;
+                    });
+                    // Check and activate the clicked label
+                    label.classList.add('active');
+                    label.querySelector('input').checked = true;
+                }
+            });
+        };
+        
+        setupRadioGroup('orientation-group');
+        setupRadioGroup('quality-group');
+
     </script>
 </body>
 </html>
