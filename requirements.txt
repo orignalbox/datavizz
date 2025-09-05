@@ -1,19 +1,15 @@
-Flask is the web framework
+
 
 Flask==3.0.3
-Gunicorn is our production web server
+
 
 gunicorn==22.0.0
 
-Manim is the core animation engine
-
 manim==0.18.1
 
-Googles Generative AI client library
 
 google-generativeai==0.7.1
 
-Flask-Cors handles Cross-Origin Resource Sharing
 
 Flask-Cors==4.0.1
 
